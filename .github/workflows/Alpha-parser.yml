@@ -35,7 +35,7 @@ jobs:
           # Пишем заголовки в итоговый текстовый файл sub.txt
           echo "#profile-title: Alpha Test Servers" > configs/sub.txt
           echo "#profile-update-interval: 1" >> configs/sub.txt
-          echo "#announce: сервера в alpha тестировании" >> configs/sub.txt
+          echo "#profile-announcements: сервера в alpha тестировании" >> configs/sub.txt
           echo "#subscription-userinfo: upload=0; download=0; total=0; expire=0" >> configs/sub.txt
 
           # Обработка и переименование серверов через awk
@@ -50,21 +50,9 @@ jobs:
               match(old_name, /^((%[0-9A-Fa-f]{2})+)/)
               flags = substr(old_name, RSTART, RLENGTH)
 
-              # Проверяем страну
-              country = ""
-              upper_name = toupper(old_name)
-              if (upper_name ~ /(RU|RUS|РОССИЯ|РФ)/) country = " [Russia]"
-              else if (upper_name ~ /(DE|GER|ГЕРМАНИЯ)/) country = " [Germany]"
-              else if (upper_name ~ /(NL|NETHERLANDS|НИДЕРЛАНДЫ)/) country = " [Netherlands]"
-              else if (upper_name ~ /(FI|FINLAND|ФИНЛЯНДИЯ)/) country = " [Finland]"
-
-              # Формируем новое закодированное имя
+              # Формируем безопасный закодированный шаблон: [OpenStar] Test Server №X
+              # [OpenStar] Test Server № -> %5BOpenStar%5D%20Test%20Server%20%E2%84%96
               new_text = "%5BOpenStar%5D%20Test%20Server%20%E2%84%96" count
-
-              if (country == " [Russia]") new_text = new_text "%20%5BRussia%5D"
-              if (country == " [Germany]") new_text = new_text "%20%5BGermany%5D"
-              if (country == " [Netherlands]") new_text = new_text "%20%5BNetherlands%5D"
-              if (country == " [Finland]") new_text = new_text "%20%5BFinland%5D"
 
               # Склеиваем и пишем в файл
               print base_url "#" flags new_text
