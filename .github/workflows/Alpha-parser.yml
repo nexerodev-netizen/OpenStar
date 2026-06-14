@@ -35,7 +35,7 @@ jobs:
           # Пишем заголовки в итоговый текстовый файл sub.txt
           echo "#profile-title: Alpha Test Servers" > configs/sub.txt
           echo "#profile-update-interval: 1" >> configs/sub.txt
-          echo "#profile-announcements: сервера в alpha тестировании" >> configs/sub.txt
+          echo "#announce: сервера в alpha тестировании" >> configs/sub.txt
           echo "#subscription-userinfo: upload=0; download=0; total=0; expire=0" >> configs/sub.txt
 
           # Обработка и переименование серверов через awk
