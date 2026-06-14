@@ -1,20 +1,83 @@
 name: Обновление VPN подписки
 
+# Настройки запуска
 on:
-  workflow_dispatch:
+  workflow_dispatch:      # Кнопка для ручного запуска
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 */6 * * *'  # Автозапуск каждые 6 часов
 
-# ВОТ ЭТОТ БЛОК НАДО ДОБАВИТЬ:
+# Права на запись изменений в репозиторий
 permissions:
-  contents: write  # Даем права на запись изменений в репозиторий
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
+      # 1. Скачиваем репозиторий
       - name: Копируем репозиторий
         uses: actions/checkout@v4
 
-      # ... дальше весь остальной код без изменений ...
+      # 2. Сбор, фильтрация и сохранение только в sub.txt
+      - name: Сбор и обработка конфигураций
+        run: |
+          mkdir -p configs
+          touch temp_raw.txt
+
+          # Скачиваем источники
+          curl -sL "https://raw.githubusercontent.com/whoahaow/rjsxrd/refs/heads/main/githubmirror/bypass/bypass-1.txt" >> temp_raw.txt
+          curl -sL "https://raw.githack.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt" >> temp_raw.txt
+
+          # Оставляем только нужные протоколы и убираем дубликаты
+          grep -E "^(vmess|vless|ss|trojan|hysteria2|tuic)://" temp_raw.txt | sort -u > temp_clean.txt
+
+          # Пишем заголовки в итоговый текстовый файл sub.txt
+          echo "#profile-title: Alpha Test Servers" > configs/sub.txt
+          echo "#profile-update-interval: 1" >> configs/sub.txt
+          echo "#profile-announcements: сервера в alpha тестировании" >> configs/sub.txt
+          echo "#subscription-userinfo: upload=0; download=0; total=0; expire=0" >> configs/sub.txt
+
+          # Обработка и переименование серверов через awk
+          awk '
+          BEGIN { count = 1 }
+          {
+              split($0, parts, "#")
+              base_url = parts[1]
+              old_name = parts[2]
+
+              # Вырезаем закодированный флаг (%XX в начале имени)
+              match(old_name, /^((%[0-9A-Fa-f]{2})+)/)
+              flags = substr(old_name, RSTART, RLENGTH)
+
+              # Проверяем страну
+              country = ""
+              upper_name = toupper(old_name)
+              if (upper_name ~ /(RU|RUS|РОССИЯ|РФ)/) country = " [Russia]"
+              else if (upper_name ~ /(DE|GER|ГЕРМАНИЯ)/) country = " [Germany]"
+              else if (upper_name ~ /(NL|NETHERLANDS|НИДЕРЛАНДЫ)/) country = " [Netherlands]"
+              else if (upper_name ~ /(FI|FINLAND|ФИНЛЯНДИЯ)/) country = " [Finland]"
+
+              # Формируем новое закодированное имя
+              new_text = "%5BOpenStar%5D%20Test%20Server%20%E2%84%96" count
+
+              if (country == " [Russia]") new_text = new_text "%20%5BRussia%5D"
+              if (country == " [Germany]") new_text = new_text "%20%5BGermany%5D"
+              if (country == " [Netherlands]") new_text = new_text "%20%5BNetherlands%5D"
+              if (country == " [Finland]") new_text = new_text "%20%5BFinland%5D"
+
+              # Склеиваем и пишем в файл
+              print base_url "#" flags new_text
+              count++
+          }' temp_clean.txt >> configs/sub.txt
+
+          # Чистим за собой временные файлы
+          rm temp_raw.txt temp_clean.txt
+
+      # 3. Пушим изменения в GitHub
+      - name: Сохраняем результат в GitHub
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add configs/
+          git diff --quiet && git diff --staged --quiet || (git commit -m "🚀 [OpenStar] Обновление конфигураций: $(date +'%d.%m.%Y %H:%M')" && git push)
