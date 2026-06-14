@@ -1,6 +1,6 @@
 #profile-title: Alpha Test Servers
 #profile-update-interval: 1
-#profile-announcements: сервера в alpha тестировании
+#announce: сервера в alpha тестировании
 #subscription-userinfo: upload=0; download=0; total=0; expire=0
 vless://0058c215-ab1e-400c-a403-b5b2fda7e846@fast-domain-gb.dhbhvfbhfbvhfbvhfbhv.shop:2095?security=reality&type=tcp&headerType=&path=&host=&sni=refersion.com&fp=random&pbk=9nvQaypTgq2UZ_9wSUctYxStDRWNJqe3o9evmKc5UBE&sid=bc348c28dbc7b9f5&spx=%2F#%5BOpenStar%5D%20Test%20Server%20%E2%84%961%20%5BGermany%5D
 vless://06bcd513-ef0b-4c0c-a03b-e25fcda66fe2@45.195.137.5:8443?flow=xtls-rprx-vision&fp=firefox&pbk=IdqrygjwHBEMCOamBl7a504TVk6uMAtTRj0xLWcFcxY&security=reality&sid=40ce08cf20c67003&sni=storage.yandex.net&type=tcp#%F0%9F%87%A8%F0%9F%87%AD%20%5BOpenStar%5D%20Test%20Server%20%E2%84%962
