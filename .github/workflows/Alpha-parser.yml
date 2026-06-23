@@ -1,4 +1,4 @@
-name: Update Happ Subscriptions (Numbered & Clean)
+name: Update Happ Subscriptions (Full Country Name Parser)
 
 on:
   schedule:
@@ -15,7 +15,7 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Collect, Translate, Number and Merge
+    - name: Collect, Parse Full Names, Translate and Number
       run: |
         # 1. Создаем чистые временные файлы
         touch temp_white_raw.txt temp_black_raw.txt
@@ -36,9 +36,35 @@ jobs:
         [[ "$response_black" =~ ^[A-Za-z0-9+/=]+$ ]] && response_black=$(echo -n "$response_black" | base64 -d 2>/dev/null || echo -n "$response_black")
         echo "$response_black" | grep -E -o '(vless|ss|trojan|vmess)://[^[:space:]]+' >> temp_black_raw.txt || true
 
+        # --- УМНАЯ ФУНКЦИЯ ПЕРЕВОДА ПО ПОЛНОМУ СЛОВУ ---
+        get_russian_name() {
+          local raw_input="$1"
+          # Переводим в верхний регистр для точного поиска подстроки
+          local upper=$(echo "$raw_input" | tr '[:lower:]' '[:upper:]')
+
+          if [[ "$upper" =~ "GERMANY" || "$upper" =~ "DE" ]]; then echo "Германия"
+          elif [[ "$upper" =~ "DENMARK" ]]; then echo "Дания"
+          elif [[ "$upper" =~ "ESTONIA" ]]; then echo "Эстония"
+          elif [[ "$upper" =~ "FINLAND" ]]; then echo "Финляндия"
+          elif [[ "$upper" =~ "FRANCE" ]]; then echo "Франция"
+          elif [[ "$upper" =~ "RUSSIA" || "$upper" =~ "RU" ]]; then echo "Россия"
+          elif [[ "$upper" =~ "NETHERLANDS" || "$upper" =~ "NL" ]]; then echo "Нидерланды"
+          elif [[ "$upper" =~ "USA" || "$upper" =~ "UNITED STATES" || "$upper" =~ "US" ]]; then echo "США"
+          elif [[ "$upper" =~ "UNITED KINGDOM" || "$upper" =~ "GREAT BRITAIN" || "$upper" =~ "GB" || "$upper" =~ "UK" ]]; then echo "Великобритания"
+          elif [[ "$upper" =~ "SWEDEN" || "$upper" =~ "SE" ]]; then echo "Швеция"
+          elif [[ "$upper" =~ "POLAND" || "$upper" =~ "PL" ]]; then echo "Польша"
+          elif [[ "$upper" =~ "KAZAKHSTAN" || "$upper" =~ "KZ" ]]; then echo "Казахстан"
+          elif [[ "$upper" =~ "TURKEY" || "$upper" =~ "TR" ]]; then echo "Турция"
+          elif [[ "$upper" =~ "SINGAPORE" || "$upper" =~ "SG" ]]; then echo "Сингапур"
+          elif [[ "$upper" =~ "HONG KONG" || "$upper" =~ "HK" ]]; then echo "Гонконг"
+          elif [[ "$upper" =~ "JAPAN" || "$upper" =~ "JP" ]]; then echo "Япония"
+          else
+            echo "Сервер"
+          fi
+        }
+
         # --- ОБРАБОТКА И НУМЕРАЦИЯ WHITE ---
-        echo "Парсинг и нумерация White серверов..."
-        # Ассоциативный массив для подсчета серверов каждой страны (нужен bash 4+)
+        echo "Обработка White..."
         declare -A white_counters
 
         while IFS= read -r line; do
@@ -46,34 +72,11 @@ jobs:
             base_part="${line%%#*}"
             name_part="${line#*#}"
             
-            # Извлекаем первые две буквы названия (код страны) и переводим в верхний регистр
-            # Очищаем от мусора, оставляя только буквы в начале
-            clean_code=$(echo "$name_part" | sed -E 's/[^a-zA-Z]//g' | head -c 2 | tr '[:lower:]' '[:upper:]')
-            
-            # Текстовый словарь для точного определения
-            case "$clean_code" in
-              RU) country="Россия" ;;
-              DE) country="Германия" ;;
-              NL) country="Нидерланды" ;;
-              US) country="США" ;;
-              FI) country="Финляндия" ;;
-              FR) country="Франция" ;;
-              GB|UK) country="Великобритания" ;;
-              SE) country="Швеция" ;;
-              PL) country="Польша" ;;
-              KZ) country="Казахстан" ;;
-              TR) country="Турция" ;;
-              AE) country="ОАЭ" ;;
-              SG) country="Сингапур" ;;
-              HK) country="Гонконг" ;;
-              CH) country="Швейцария" ;;
-              JP) country="Япония" ;;
-              *) country="${clean_code:-Сервер}" ;; # Если код неопознан, оставит сам двухбуквенный код
-            esac
+            # Определяем страну по полному слову из тега
+            country=$(get_russian_name "$name_part")
 
-            # Инкрементируем счетчик для конкретной страны в списке white
+            # Инкрементируем индивидуальный счетчик для этой страны в списке white
             white_counters["$country"]=$(( ${white_counters["$country"]:-0} + 1 ))
-            # Форматируем номер, чтобы было красиво (01, 02 вместо 1, 2)
             num=$(printf "%02d" "${white_counters["$country"]}")
 
             echo "${base_part}#${country} ${num} | white" >> temp_combined_processed.txt
@@ -83,7 +86,7 @@ jobs:
         done < <(sort -u temp_white_raw.txt)
 
         # --- ОБРАБОТКА И НУМЕРАЦИЯ BLACK ---
-        echo "Парсинг и нумерация Black серверов..."
+        echo "Обработка Black..."
         declare -A black_counters
 
         while IFS= read -r line; do
@@ -91,29 +94,10 @@ jobs:
             base_part="${line%%#*}"
             name_part="${line#*#}"
             
-            clean_code=$(echo "$name_part" | sed -E 's/[^a-zA-Z]//g' | head -c 2 | tr '[:lower:]' '[:upper:]')
-            
-            case "$clean_code" in
-              RU) country="Россия" ;;
-              DE) country="Германия" ;;
-              NL) country="Нидерланды" ;;
-              US) country="США" ;;
-              FI) country="Финляндия" ;;
-              FR) country="Франция" ;;
-              GB|UK) country="Великобритания" ;;
-              SE) country="Швеция" ;;
-              PL) country="Польша" ;;
-              KZ) country="Казахстан" ;;
-              TR) country="Турция" ;;
-              AE) country="ОАЭ" ;;
-              SG) country="Сингапур" ;;
-              HK) country="Гонконг" ;;
-              CH) country="Швейцария" ;;
-              JP) country="Япония" ;;
-              *) country="${clean_code:-Сервер}" ;;
-            esac
+            # Определяем страну по полному слову из тега
+            country=$(get_russian_name "$name_part")
 
-            # Инкрементируем счетчик для конкретной страны в списке black
+            # Инкрементируем индивидуальный счетчик для этой страны в списке black
             black_counters["$country"]=$(( ${black_counters["$country"]:-0} + 1 ))
             num=$(printf "%02d" "${black_counters["$country"]}")
 
@@ -132,13 +116,13 @@ jobs:
 
         cat temp_combined_processed.txt >> temp_final_build.txt
 
-        # Сохранение результатов в репозиторий
+        # Сохраняем в репозиторий файлы sub.txt и sub_base64.txt
         cp temp_final_build.txt sub.txt
         base64 -w 0 temp_final_build.txt > sub_base64.txt
 
-        # --- СТРОГОЕ УДАЛЕНИЕ ВРЕМЕННЫХ ФАЙЛОВ ---
+        # --- СТРОГОЕ УДАЛЕНИЕ ВСЕХ ВРЕМЕННЫХ ФАЙЛОВ ---
         rm -f temp_white_raw.txt temp_black_raw.txt temp_combined_processed.txt temp_final_build.txt
-        echo "Все временные файлы успешно удалены."
+        echo "Временные файлы стерты. Конвейер чист!"
 
     - name: Commit and Push changes
       run: |
@@ -146,4 +130,4 @@ jobs:
         git config --local user.name "GitHub Actions"
         git add sub.txt sub_base64.txt
         
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Happ Sync (Numbered Format): $(date -u +'%Y-%m-%d %H:%M:%S') UTC" && git push)
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Happ Sync (Full Country Words): $(date -u +'%Y-%m-%d %H:%M:%S') UTC" && git push)
