@@ -1,9 +1,9 @@
-name: Update Happ Subscriptions (Split Lists & Safe Percent-Encoding)
+name: Update Happ Subscriptions (Igareck Sources)
 
 on:
   schedule:
-    - cron: '0 */4 * * *'
-  workflow_dispatch:
+    - cron: '0 */4 * * *' # Запуск каждые 4 часа
+  workflow_dispatch: # Кнопка для ручного запуска в интерфейсе GitHub
 
 permissions:
   contents: write
@@ -15,76 +15,72 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Collect, Rename and Merge Configs
+    - name: Collect, Rename, Merge and Cleanup
       run: |
-        # Создаем временные файлы для сырых и обработанных данных
+        # 1. Создаем чистые временные файлы для работы
         touch temp_white_raw.txt temp_black_raw.txt
-        touch temp_processed.txt
-        touch final_sub.txt
+        touch temp_combined_processed.txt
+        touch temp_final_build.txt
 
-        # --- 1. СБОР ИЗ WHITE.TXT ---
-        if [ -f white.txt ]; then
-          while IFS= read -r url || [ -n "$url" ]; do
-            [[ -z "$url" || "$url" =~ ^# ]] && continue
-            response=$(curl -sL -A "Mozilla/5.0" "$url")
-            [[ "$response" =~ ^[A-Za-z0-9+/=]+$ ]] && response=$(echo -n "$response" | base64 -d 2>/dev/null || echo -n "$response")
-            echo "$response" | grep -E -o '(vless|ss|trojan|vmess)://[^[:space:]]+' >> temp_white_raw.txt || true
-          done < white.txt
-        fi
+        # --- ОБРАБОТКА WHITE СПИСКА ---
+        echo "Скачиваю White источник от igareck..."
+        url_white="https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt"
+        response_white=$(curl -sL -A "Mozilla/5.0" "$url_white")
+        # Декодируем из base64, если источник полностью зашифрован
+        [[ "$response_white" =~ ^[A-Za-z0-9+/=]+$ ]] && response_white=$(echo -n "$response_white" | base64 -d 2>/dev/null || echo -n "$response_white")
+        echo "$response_white" | grep -E -o '(vless|ss|trojan|vmess)://[^[:space:]]+' >> temp_white_raw.txt || true
 
-        # --- 2. СБОР ИЗ BLACK.TXT ---
-        if [ -f black.txt ]; then
-          while IFS= read -r url || [ -n "$url" ]; do
-            [[ -z "$url" || "$url" =~ ^# ]] && continue
-            response=$(curl -sL -A "Mozilla/5.0" "$url")
-            [[ "$response" =~ ^[A-Za-z0-9+/=]+$ ]] && response=$(echo -n "$response" | base64 -d 2>/dev/null || echo -n "$response")
-            echo "$response" | grep -E -o '(vless|ss|trojan|vmess)://[^[:space:]]+' >> temp_black_raw.txt || true
-          done < black.txt
-        fi
-
-        # --- 3. БЕЗОПАСНАЯ ОБРАБОТКА WHITE (Сортировка уникальных и переименование) ---
+        # Безопасное переименование WHITE (сохраняем %число и флаги)
         while IFS= read -r line; do
           if [[ "$line" == *#* ]]; then
-            # Разделяем строку строго по первому знаку #, сохраняя все %число нетронутыми
             base_part="${line%%#*}"
             name_part="${line#*#}"
-            # Обрезаем имя, но аккуратно, чтобы не порвать %-последовательность в конце
             short_name=$(echo -n "$name_part" | head -c 30)
-            echo "${base_part}#Happ | White | ${short_name}" >> temp_processed.txt
+            echo "${base_part}#Happ | White | ${short_name}" >> temp_combined_processed.txt
           else
-            echo "${line}#Happ | White_Server" >> temp_processed.txt
+            echo "${line}#Happ | White_Server" >> temp_combined_processed.txt
           fi
         done < <(sort -u temp_white_raw.txt)
 
-        # --- 4. БЕЗОПАСНАЯ ОБРАБОТКА BLACK (Сортировка уникальных и переименование) ---
+        # --- ОБРАБОТКА BLACK СПИСКА ---
+        echo "Скачиваю Black источник от igareck..."
+        url_black="https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS_mobile.txt"
+        response_black=$(curl -sL -A "Mozilla/5.0" "$url_black")
+        # Декодируем из base64, если источник полностью зашифрован
+        [[ "$response_black" =~ ^[A-Za-z0-9+/=]+$ ]] && response_black=$(echo -n "$response_black" | base64 -d 2>/dev/null || echo -n "$response_black")
+        echo "$response_black" | grep -E -o '(vless|ss|trojan|vmess)://[^[:space:]]+' >> temp_black_raw.txt || true
+
+        # Безопасное переименование BLACK (сохраняем %число и флаги)
         while IFS= read -r line; do
           if [[ "$line" == *#* ]]; then
             base_part="${line%%#*}"
             name_part="${line#*#}"
             short_name=$(echo -n "$name_part" | head -c 30)
-            echo "${base_part}#Happ | Black | ${short_name}" >> temp_processed.txt
+            echo "${base_part}#Happ | Black | ${short_name}" >> temp_combined_processed.txt
           else
-            echo "${line}#Happ | Black_Server" >> temp_processed.txt
+            echo "${line}#Happ | Black_Server" >> temp_combined_processed.txt
           fi
         done < <(sort -u temp_black_raw.txt)
 
-        # --- 5. СБОРКА И ПУБЛИКАЦИЯ ---
-        # Шапка профиля
-        echo "#subscription-userinfo: upload=0; download=0; total=107374182400" >> final_sub.txt
-        echo "# profile-update-interval: 1" >> final_sub.txt
-        echo "# profile-title: Happ VPN Global" >> final_sub.txt
-        echo "# annonce: Подписка Happ VPN (Склеенная). Баланс: 1000₽" >> final_sub.txt
-        echo "" >> final_sub.txt
+        # --- СБОРКА ФИНАЛЬНОГО ФАЙЛА ---
+        # Записываем провайдерские метаданные (твою фирменную шапку)
+        echo "#subscription-userinfo: upload=0; download=0; total=107374182400" >> temp_final_build.txt
+        echo "# profile-update-interval: 1" >> temp_final_build.txt
+        echo "# profile-title: Happ VPN Global" >> temp_final_build.txt
+        echo "# annonce: Подписка Happ VPN обновлена. Тестовый Баланс: 1000₽" >> temp_final_build.txt
+        echo "" >> temp_final_build.txt
 
-        # Добавляем все обработанные прокси после шапки
-        cat temp_processed.txt >> final_sub.txt
+        # Добавляем все обработанные уникальные конфиги из обоих списков
+        cat temp_combined_processed.txt >> temp_final_build.txt
 
-        # Сохраняем и делаем base64-версию
-        cp final_sub.txt sub.txt
-        base64 -w 0 final_sub.txt > sub_base64.txt
+        # Фиксируем результат в файлы репозитория
+        cp temp_final_build.txt sub.txt
+        base64 -w 0 temp_final_build.txt > sub_base64.txt
 
-        # Чистим за собой временный мусор
-        rm -f temp_white_raw.txt temp_black_raw.txt temp_processed.txt final_sub.txt
+        # --- СТРОГОЕ УДАЛЕНИЕ ВСЕХ ТЕМПОВЫХ ФАЙЛОВ ---
+        echo "Удаляю временные файлы..."
+        rm -f temp_white_raw.txt temp_black_raw.txt temp_combined_processed.txt temp_final_build.txt
+        echo "Конвейер чист!"
 
     - name: Commit and Push changes
       run: |
@@ -92,4 +88,5 @@ jobs:
         git config --local user.name "GitHub Actions"
         git add sub.txt sub_base64.txt
         
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Happ Sync (White/Black Split): $(date -u +'%Y-%m-%d %H:%M:%S') UTC" && git push)
+        # Пушим коммит только в случае изменений в подписках
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Happ Sync (Igareck Sources): $(date -u +'%Y-%m-%d %H:%M:%S') UTC" && git push)
