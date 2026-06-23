@@ -1,0 +1,5 @@
+#subscription-userinfo: upload=0; download=0; total=107374182400
+# profile-update-interval: 1
+# profile-title: Happ VPN Global
+# annonce: Подписка Happ VPN (Склеенная). Баланс: 1000₽
+
