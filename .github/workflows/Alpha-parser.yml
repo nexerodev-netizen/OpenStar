@@ -1,71 +1,95 @@
-name: Обновление VPN подписки
+name: Update Happ Subscriptions (Split Lists & Safe Percent-Encoding)
 
-# Настройки запуска
 on:
-  workflow_dispatch:      # Кнопка для ручного запуска
   schedule:
-    - cron: '0 */6 * * *'  # Автозапуск каждые 6 часов
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
 
-# Права на запись изменений в репозиторий
 permissions:
   contents: write
 
 jobs:
-  build:
+  aggregate:
     runs-on: ubuntu-latest
-
     steps:
-      # 1. Скачиваем репозиторий
-      - name: Копируем репозиторий
-        uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
-      # 2. Сбор, фильтрация и сохранение только в sub.txt
-      - name: Сбор и обработка конфигураций
-        run: |
-          mkdir -p configs
-          touch temp_raw.txt
+    - name: Collect, Rename and Merge Configs
+      run: |
+        # Создаем временные файлы для сырых и обработанных данных
+        touch temp_white_raw.txt temp_black_raw.txt
+        touch temp_processed.txt
+        touch final_sub.txt
 
-          # Скачиваем источники
-          curl -sL "https://raw.githubusercontent.com/whoahaow/rjsxrd/refs/heads/main/githubmirror/bypass/bypass-1.txt" >> temp_raw.txt
-          curl -sL "https://raw.githack.com/igareck/vpn-configs-for-russia/main/BLACK_VLESS_RUS.txt" >> temp_raw.txt
+        # --- 1. СБОР ИЗ WHITE.TXT ---
+        if [ -f white.txt ]; then
+          while IFS= read -r url || [ -n "$url" ]; do
+            [[ -z "$url" || "$url" =~ ^# ]] && continue
+            response=$(curl -sL -A "Mozilla/5.0" "$url")
+            [[ "$response" =~ ^[A-Za-z0-9+/=]+$ ]] && response=$(echo -n "$response" | base64 -d 2>/dev/null || echo -n "$response")
+            echo "$response" | grep -E -o '(vless|ss|trojan|vmess)://[^[:space:]]+' >> temp_white_raw.txt || true
+          done < white.txt
+        fi
 
-          # Оставляем только нужные протоколы и убираем дубликаты
-          grep -E "^(vmess|vless|ss|trojan|hysteria2|tuic)://" temp_raw.txt | sort -u > temp_clean.txt
+        # --- 2. СБОР ИЗ BLACK.TXT ---
+        if [ -f black.txt ]; then
+          while IFS= read -r url || [ -n "$url" ]; do
+            [[ -z "$url" || "$url" =~ ^# ]] && continue
+            response=$(curl -sL -A "Mozilla/5.0" "$url")
+            [[ "$response" =~ ^[A-Za-z0-9+/=]+$ ]] && response=$(echo -n "$response" | base64 -d 2>/dev/null || echo -n "$response")
+            echo "$response" | grep -E -o '(vless|ss|trojan|vmess)://[^[:space:]]+' >> temp_black_raw.txt || true
+          done < black.txt
+        fi
 
-          # Пишем заголовки в итоговый текстовый файл sub.txt
-          echo "#profile-title: Alpha Test Servers" > configs/sub.txt
-          echo "#profile-update-interval: 1" >> configs/sub.txt
-          echo "#profile-announcements: сервера в alpha тестировании" >> configs/sub.txt
-          echo "#subscription-userinfo: upload=0; download=0; total=0; expire=0" >> configs/sub.txt
+        # --- 3. БЕЗОПАСНАЯ ОБРАБОТКА WHITE (Сортировка уникальных и переименование) ---
+        while IFS= read -r line; do
+          if [[ "$line" == *#* ]]; then
+            # Разделяем строку строго по первому знаку #, сохраняя все %число нетронутыми
+            base_part="${line%%#*}"
+            name_part="${line#*#}"
+            # Обрезаем имя, но аккуратно, чтобы не порвать %-последовательность в конце
+            short_name=$(echo -n "$name_part" | head -c 30)
+            echo "${base_part}#Happ | White | ${short_name}" >> temp_processed.txt
+          else
+            echo "${line}#Happ | White_Server" >> temp_processed.txt
+          fi
+        done < <(sort -u temp_white_raw.txt)
 
-          # Обработка и переименование серверов через awk
-          awk '
-          BEGIN { count = 1 }
-          {
-              split($0, parts, "#")
-              base_url = parts[1]
-              old_name = parts[2]
+        # --- 4. БЕЗОПАСНАЯ ОБРАБОТКА BLACK (Сортировка уникальных и переименование) ---
+        while IFS= read -r line; do
+          if [[ "$line" == *#* ]]; then
+            base_part="${line%%#*}"
+            name_part="${line#*#}"
+            short_name=$(echo -n "$name_part" | head -c 30)
+            echo "${base_part}#Happ | Black | ${short_name}" >> temp_processed.txt
+          else
+            echo "${line}#Happ | Black_Server" >> temp_processed.txt
+          fi
+        done < <(sort -u temp_black_raw.txt)
 
-              # Вырезаем закодированный флаг (%XX в начале имени)
-              match(old_name, /^((%[0-9A-Fa-f]{2})+)/)
-              flags = substr(old_name, RSTART, RLENGTH)
+        # --- 5. СБОРКА И ПУБЛИКАЦИЯ ---
+        # Шапка профиля
+        echo "#subscription-userinfo: upload=0; download=0; total=107374182400" >> final_sub.txt
+        echo "# profile-update-interval: 1" >> final_sub.txt
+        echo "# profile-title: Happ VPN Global" >> final_sub.txt
+        echo "# annonce: Подписка Happ VPN (Склеенная). Баланс: 1000₽" >> final_sub.txt
+        echo "" >> final_sub.txt
 
-              # Формируем безопасный закодированный шаблон: [OpenStar] Test Server №X
-              # [OpenStar] Test Server № -> %5BOpenStar%5D%20Test%20Server%20%E2%84%96
-              new_text = "%5BOpenStar%5D%20Test%20Server%20%E2%84%96" count
+        # Добавляем все обработанные прокси после шапки
+        cat temp_processed.txt >> final_sub.txt
 
-              # Склеиваем и пишем в файл
-              print base_url "#" flags new_text
-              count++
-          }' temp_clean.txt >> configs/sub.txt
+        # Сохраняем и делаем base64-версию
+        cp final_sub.txt sub.txt
+        base64 -w 0 final_sub.txt > sub_base64.txt
 
-          # Чистим за собой временные файлы
-          rm temp_raw.txt temp_clean.txt
+        # Чистим за собой временный мусор
+        rm -f temp_white_raw.txt temp_black_raw.txt temp_processed.txt final_sub.txt
 
-      # 3. Пушим изменения в GitHub
-      - name: Сохраняем результат в GitHub
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add configs/
-          git diff --quiet && git diff --staged --quiet || (git commit -m "🚀 [OpenStar] Обновление конфигураций: $(date +'%d.%m.%Y %H:%M')" && git push)
+    - name: Commit and Push changes
+      run: |
+        git config --local user.email "actions@github.com"
+        git config --local user.name "GitHub Actions"
+        git add sub.txt sub_base64.txt
+        
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Happ Sync (White/Black Split): $(date -u +'%Y-%m-%d %H:%M:%S') UTC" && git push)
