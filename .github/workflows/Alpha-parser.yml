@@ -1,4 +1,4 @@
-name: Update Happ Subscriptions (Universal Translator)
+name: Update Happ Subscriptions (Numbered & Clean)
 
 on:
   schedule:
@@ -15,12 +15,7 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Install System Translators
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y iso-codes translate-shell || true
-
-    - name: Collect, Translate, Clean and Merge
+    - name: Collect, Translate, Number and Merge
       run: |
         # 1. Создаем чистые временные файлы
         touch temp_white_raw.txt temp_black_raw.txt
@@ -41,62 +36,90 @@ jobs:
         [[ "$response_black" =~ ^[A-Za-z0-9+/=]+$ ]] && response_black=$(echo -n "$response_black" | base64 -d 2>/dev/null || echo -n "$response_black")
         echo "$response_black" | grep -E -o '(vless|ss|trojan|vmess)://[^[:space:]]+' >> temp_black_raw.txt || true
 
-        # --- УНИВЕРСАЛЬНАЯ ФУНКЦИЯ ПЕРЕВОДА И КЛИНИНГА ---
-        universal_clean_and_translate() {
-          local raw_name="$1"
-          local tag="$2"
+        # --- ОБРАБОТКА И НУМЕРАЦИЯ WHITE ---
+        echo "Парсинг и нумерация White серверов..."
+        # Ассоциативный массив для подсчета серверов каждой страны (нужен bash 4+)
+        declare -A white_counters
 
-          # 1. Очищаем от CIDR (/24, /32), anycast, mobile и спецсимволов, переводя в верхний регистр
-          local clean=$(echo "$raw_name" | sed -E 's/\/[0-9]+//g' | sed -E 's/(anycast|mobile|server|vless|vpn)//gi' | tr -d '[:space:]_-,.' | tr '[:lower:]' '[:upper:]')
-          
-          # 2. Извлекаем первые 2 буквы (обычно это ISO-код страны вроде DE, RU, US)
-          local country_code=$(echo "$clean" | head -c 2)
-          local country_name="Сервер"
-
-          # 3. Пытаемся вытащить перевод из системного словаря ISO-3166
-          if [[ -n "$country_code" ]]; then
-            local system_translation=$(iso-lookup --iso=3166 --code="$country_code" --locale=ru 2>/dev/null | head -n 1)
-            if [[ -n "$system_translation" ]]; then
-              country_name="$system_translation"
-            else
-              # Костыли для частых кастомных сокращений, если ISO не распознал
-              case "$country_code"修 in
-                UK) country_name="Великобритания" ;;
-                US) country_name="США" ;;
-                UA) country_name="Украина" ;;
-                KZ) country_name="Казахстан" ;;
-                *) country_name="$country_code" ;; # Если совсем не распознали, останется просто код (например, SG)
-              esac
-            fi
-          fi
-
-          # Вывод строго по твоему формату
-          echo "${country_name} | ${tag}"
-        }
-
-        # --- ОБРАБОТКА WHITE ---
         while IFS= read -r line; do
           if [[ "$line" == *#* ]]; then
             base_part="${line%%#*}"
             name_part="${line#*#}"
             
-            final_tag=$(universal_clean_and_translate "$name_part" "white")
-            echo "${base_part}#${final_tag}" >> temp_combined_processed.txt
+            # Извлекаем первые две буквы названия (код страны) и переводим в верхний регистр
+            # Очищаем от мусора, оставляя только буквы в начале
+            clean_code=$(echo "$name_part" | sed -E 's/[^a-zA-Z]//g' | head -c 2 | tr '[:lower:]' '[:upper:]')
+            
+            # Текстовый словарь для точного определения
+            case "$clean_code" in
+              RU) country="Россия" ;;
+              DE) country="Германия" ;;
+              NL) country="Нидерланды" ;;
+              US) country="США" ;;
+              FI) country="Финляндия" ;;
+              FR) country="Франция" ;;
+              GB|UK) country="Великобритания" ;;
+              SE) country="Швеция" ;;
+              PL) country="Польша" ;;
+              KZ) country="Казахстан" ;;
+              TR) country="Турция" ;;
+              AE) country="ОАЭ" ;;
+              SG) country="Сингапур" ;;
+              HK) country="Гонконг" ;;
+              CH) country="Швейцария" ;;
+              JP) country="Япония" ;;
+              *) country="${clean_code:-Сервер}" ;; # Если код неопознан, оставит сам двухбуквенный код
+            esac
+
+            # Инкрементируем счетчик для конкретной страны в списке white
+            white_counters["$country"]=$(( ${white_counters["$country"]:-0} + 1 ))
+            # Форматируем номер, чтобы было красиво (01, 02 вместо 1, 2)
+            num=$(printf "%02d" "${white_counters["$country"]}")
+
+            echo "${base_part}#${country} ${num} | white" >> temp_combined_processed.txt
           else
-            echo "${line}#Сервер | white" >> temp_combined_processed.txt
+            echo "${line}#Неизвестно | white" >> temp_combined_processed.txt
           fi
         done < <(sort -u temp_white_raw.txt)
 
-        # --- ОБРАБОТКА BLACK ---
+        # --- ОБРАБОТКА И НУМЕРАЦИЯ BLACK ---
+        echo "Парсинг и нумерация Black серверов..."
+        declare -A black_counters
+
         while IFS= read -r line; do
           if [[ "$line" == *#* ]]; then
             base_part="${line%%#*}"
             name_part="${line#*#}"
             
-            final_tag=$(universal_clean_and_translate "$name_part" "black")
-            echo "${base_part}#${final_tag}" >> temp_combined_processed.txt
+            clean_code=$(echo "$name_part" | sed -E 's/[^a-zA-Z]//g' | head -c 2 | tr '[:lower:]' '[:upper:]')
+            
+            case "$clean_code" in
+              RU) country="Россия" ;;
+              DE) country="Германия" ;;
+              NL) country="Нидерланды" ;;
+              US) country="США" ;;
+              FI) country="Финляндия" ;;
+              FR) country="Франция" ;;
+              GB|UK) country="Великобритания" ;;
+              SE) country="Швеция" ;;
+              PL) country="Польша" ;;
+              KZ) country="Казахстан" ;;
+              TR) country="Турция" ;;
+              AE) country="ОАЭ" ;;
+              SG) country="Сингапур" ;;
+              HK) country="Гонконг" ;;
+              CH) country="Швейцария" ;;
+              JP) country="Япония" ;;
+              *) country="${clean_code:-Сервер}" ;;
+            esac
+
+            # Инкрементируем счетчик для конкретной страны в списке black
+            black_counters["$country"]=$(( ${black_counters["$country"]:-0} + 1 ))
+            num=$(printf "%02d" "${black_counters["$country"]}")
+
+            echo "${base_part}#${country} ${num} | black" >> temp_combined_processed.txt
           else
-            echo "${line}#Сервер | black" >> temp_combined_processed.txt
+            echo "${line}#Неизвестно | black" >> temp_combined_processed.txt
           fi
         done < <(sort -u temp_black_raw.txt)
 
@@ -109,13 +132,13 @@ jobs:
 
         cat temp_combined_processed.txt >> temp_final_build.txt
 
-        # Фиксация в репозиторий
+        # Сохранение результатов в репозиторий
         cp temp_final_build.txt sub.txt
         base64 -w 0 temp_final_build.txt > sub_base64.txt
 
-        # --- ОЧИСТКА ---
+        # --- СТРОГОЕ УДАЛЕНИЕ ВРЕМЕННЫХ ФАЙЛОВ ---
         rm -f temp_white_raw.txt temp_black_raw.txt temp_combined_processed.txt temp_final_build.txt
-        echo "Временные файлы удалены."
+        echo "Все временные файлы успешно удалены."
 
     - name: Commit and Push changes
       run: |
@@ -123,4 +146,4 @@ jobs:
         git config --local user.name "GitHub Actions"
         git add sub.txt sub_base64.txt
         
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Happ Sync (Universal Translation): $(date -u +'%Y-%m-%d %H:%M:%S') UTC" && git push)
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Happ Sync (Numbered Format): $(date -u +'%Y-%m-%d %H:%M:%S') UTC" && git push)
