@@ -1,4 +1,4 @@
-name: Update Happ Subscriptions (Full Country Name Parser)
+name: Update Happ Subscriptions (Fixed Flags & Clean Filter)
 
 on:
   schedule:
@@ -15,7 +15,7 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Collect, Parse Full Names, Translate and Number
+    - name: Collect, Clean Flags, Translate and Filter
       run: |
         # 1. Создаем чистые временные файлы
         touch temp_white_raw.txt temp_black_raw.txt
@@ -36,10 +36,10 @@ jobs:
         [[ "$response_black" =~ ^[A-Za-z0-9+/=]+$ ]] && response_black=$(echo -n "$response_black" | base64 -d 2>/dev/null || echo -n "$response_black")
         echo "$response_black" | grep -E -o '(vless|ss|trojan|vmess)://[^[:space:]]+' >> temp_black_raw.txt || true
 
-        # --- УМНАЯ ФУНКЦИЯ ПЕРЕВОДА ПО ПОЛНОМУ СЛОВУ ---
+        # --- БЕЗОПАСНАЯ ФУНКЦИЯ ОПРЕДЕЛЕНИЯ СТРАНЫ ---
         get_russian_name() {
           local raw_input="$1"
-          # Переводим в верхний регистр для точного поиска подстроки
+          # Переводим в верхний регистр только локально для проверки условий, не трогая оригинал строки
           local upper=$(echo "$raw_input" | tr '[:lower:]' '[:upper:]')
 
           if [[ "$upper" =~ "GERMANY" || "$upper" =~ "DE" ]]; then echo "Германия"
@@ -59,53 +59,56 @@ jobs:
           elif [[ "$upper" =~ "HONG KONG" || "$upper" =~ "HK" ]]; then echo "Гонконг"
           elif [[ "$upper" =~ "JAPAN" || "$upper" =~ "JP" ]]; then echo "Япония"
           else
-            echo "Сервер"
+            echo "Удалить" # Метка для серверов, которые нужно стереть
           fi
         }
 
         # --- ОБРАБОТКА И НУМЕРАЦИЯ WHITE ---
-        echo "Обработка White..."
         declare -A white_counters
+        # Используем awk для удаления дубликатов с сохранением исходного порядка (фикс поломки флагов)
+        awk '!visited[$0]++' temp_white_raw.txt > temp_white_unique.txt
 
         while IFS= read -r line; do
           if [[ "$line" == *#* ]]; then
             base_part="${line%%#*}"
             name_part="${line#*#}"
             
-            # Определяем страну по полному слову из тега
             country=$(get_russian_name "$name_part")
 
-            # Инкрементируем индивидуальный счетчик для этой страны в списке white
+            # Если страна не распознана — полностью игнорируем эту строку
+            if [[ "$country" == "Удалить" ]]; then
+              continue
+            fi
+
             white_counters["$country"]=$(( ${white_counters["$country"]:-0} + 1 ))
             num=$(printf "%02d" "${white_counters["$country"]}")
 
             echo "${base_part}#${country} ${num} | white" >> temp_combined_processed.txt
-          else
-            echo "${line}#Неизвестно | white" >> temp_combined_processed.txt
           fi
-        done < <(sort -u temp_white_raw.txt)
+        done < temp_white_unique.txt
 
         # --- ОБРАБОТКА И НУМЕРАЦИЯ BLACK ---
-        echo "Обработка Black..."
         declare -A black_counters
+        awk '!visited[$0]++' temp_black_raw.txt > temp_black_unique.txt
 
         while IFS= read -r line; do
           if [[ "$line" == *#* ]]; then
             base_part="${line%%#*}"
             name_part="${line#*#}"
             
-            # Определяем страну по полному слову из тега
             country=$(get_russian_name "$name_part")
 
-            # Инкрементируем индивидуальный счетчик для этой страны в списке black
+            # Если страна не распознана — полностью игнорируем эту строку
+            if [[ "$country" == "Удалить" ]]; then
+              continue
+            fi
+
             black_counters["$country"]=$(( ${black_counters["$country"]:-0} + 1 ))
             num=$(printf "%02d" "${black_counters["$country"]}")
 
             echo "${base_part}#${country} ${num} | black" >> temp_combined_processed.txt
-          else
-            echo "${line}#Неизвестно | black" >> temp_combined_processed.txt
           fi
-        done < <(sort -u temp_black_raw.txt)
+        done < temp_black_unique.txt
 
         # --- СБОРКА ФИНАЛЬНОГО ФАЙЛА С МЕТАДАННЫМИ ---
         echo "#subscription-userinfo: upload=0; download=0; total=107374182400" >> temp_final_build.txt
@@ -121,8 +124,8 @@ jobs:
         base64 -w 0 temp_final_build.txt > sub_base64.txt
 
         # --- СТРОГОЕ УДАЛЕНИЕ ВСЕХ ВРЕМЕННЫХ ФАЙЛОВ ---
-        rm -f temp_white_raw.txt temp_black_raw.txt temp_combined_processed.txt temp_final_build.txt
-        echo "Временные файлы стерты. Конвейер чист!"
+        rm -f temp_white_raw.txt temp_black_raw.txt temp_white_unique.txt temp_black_unique.txt temp_combined_processed.txt temp_final_build.txt
+        echo "Все временные файлы успешно удалены. Скрипт отработал чисто!"
 
     - name: Commit and Push changes
       run: |
@@ -130,4 +133,4 @@ jobs:
         git config --local user.name "GitHub Actions"
         git add sub.txt sub_base64.txt
         
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Happ Sync (Full Country Words): $(date -u +'%Y-%m-%d %H:%M:%S') UTC" && git push)
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Happ Sync (Fixed Flags & Filtered): $(date -u +'%Y-%m-%d %H:%M:%S') UTC" && git push)
