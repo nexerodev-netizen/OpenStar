@@ -1,9 +1,9 @@
-name: Update Happ Subscriptions (Igareck Sources)
+name: Update Happ Subscriptions (Universal Translator)
 
 on:
   schedule:
-    - cron: '0 */4 * * *' # Запуск каждые 4 часа
-  workflow_dispatch: # Кнопка для ручного запуска в интерфейсе GitHub
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -15,9 +15,14 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Collect, Rename, Merge and Cleanup
+    - name: Install System Translators
       run: |
-        # 1. Создаем чистые временные файлы для работы
+        sudo apt-get update
+        sudo apt-get install -y iso-codes translate-shell || true
+
+    - name: Collect, Translate, Clean and Merge
+      run: |
+        # 1. Создаем чистые временные файлы
         touch temp_white_raw.txt temp_black_raw.txt
         touch temp_combined_processed.txt
         touch temp_final_build.txt
@@ -26,61 +31,91 @@ jobs:
         echo "Скачиваю White источник от igareck..."
         url_white="https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt"
         response_white=$(curl -sL -A "Mozilla/5.0" "$url_white")
-        # Декодируем из base64, если источник полностью зашифрован
         [[ "$response_white" =~ ^[A-Za-z0-9+/=]+$ ]] && response_white=$(echo -n "$response_white" | base64 -d 2>/dev/null || echo -n "$response_white")
         echo "$response_white" | grep -E -o '(vless|ss|trojan|vmess)://[^[:space:]]+' >> temp_white_raw.txt || true
-
-        # Безопасное переименование WHITE (сохраняем %число и флаги)
-        while IFS= read -r line; do
-          if [[ "$line" == *#* ]]; then
-            base_part="${line%%#*}"
-            name_part="${line#*#}"
-            short_name=$(echo -n "$name_part" | head -c 30)
-            echo "${base_part}#Happ | White | ${short_name}" >> temp_combined_processed.txt
-          else
-            echo "${line}#Happ | White_Server" >> temp_combined_processed.txt
-          fi
-        done < <(sort -u temp_white_raw.txt)
 
         # --- ОБРАБОТКА BLACK СПИСКА ---
         echo "Скачиваю Black источник от igareck..."
         url_black="https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_VLESS_RUS_mobile.txt"
         response_black=$(curl -sL -A "Mozilla/5.0" "$url_black")
-        # Декодируем из base64, если источник полностью зашифрован
         [[ "$response_black" =~ ^[A-Za-z0-9+/=]+$ ]] && response_black=$(echo -n "$response_black" | base64 -d 2>/dev/null || echo -n "$response_black")
         echo "$response_black" | grep -E -o '(vless|ss|trojan|vmess)://[^[:space:]]+' >> temp_black_raw.txt || true
 
-        # Безопасное переименование BLACK (сохраняем %число и флаги)
+        # --- УНИВЕРСАЛЬНАЯ ФУНКЦИЯ ПЕРЕВОДА И КЛИНИНГА ---
+        universal_clean_and_translate() {
+          local raw_name="$1"
+          local tag="$2"
+
+          # 1. Очищаем от CIDR (/24, /32), anycast, mobile и спецсимволов, переводя в верхний регистр
+          local clean=$(echo "$raw_name" | sed -E 's/\/[0-9]+//g' | sed -E 's/(anycast|mobile|server|vless|vpn)//gi' | tr -d '[:space:]_-,.' | tr '[:lower:]' '[:upper:]')
+          
+          # 2. Извлекаем первые 2 буквы (обычно это ISO-код страны вроде DE, RU, US)
+          local country_code=$(echo "$clean" | head -c 2)
+          local country_name="Сервер"
+
+          # 3. Пытаемся вытащить перевод из системного словаря ISO-3166
+          if [[ -n "$country_code" ]]; then
+            local system_translation=$(iso-lookup --iso=3166 --code="$country_code" --locale=ru 2>/dev/null | head -n 1)
+            if [[ -n "$system_translation" ]]; then
+              country_name="$system_translation"
+            else
+              # Костыли для частых кастомных сокращений, если ISO не распознал
+              case "$country_code"修 in
+                UK) country_name="Великобритания" ;;
+                US) country_name="США" ;;
+                UA) country_name="Украина" ;;
+                KZ) country_name="Казахстан" ;;
+                *) country_name="$country_code" ;; # Если совсем не распознали, останется просто код (например, SG)
+              esac
+            fi
+          fi
+
+          # Вывод строго по твоему формату
+          echo "${country_name} | ${tag}"
+        }
+
+        # --- ОБРАБОТКА WHITE ---
         while IFS= read -r line; do
           if [[ "$line" == *#* ]]; then
             base_part="${line%%#*}"
             name_part="${line#*#}"
-            short_name=$(echo -n "$name_part" | head -c 30)
-            echo "${base_part}#Happ | Black | ${short_name}" >> temp_combined_processed.txt
+            
+            final_tag=$(universal_clean_and_translate "$name_part" "white")
+            echo "${base_part}#${final_tag}" >> temp_combined_processed.txt
           else
-            echo "${line}#Happ | Black_Server" >> temp_combined_processed.txt
+            echo "${line}#Сервер | white" >> temp_combined_processed.txt
+          fi
+        done < <(sort -u temp_white_raw.txt)
+
+        # --- ОБРАБОТКА BLACK ---
+        while IFS= read -r line; do
+          if [[ "$line" == *#* ]]; then
+            base_part="${line%%#*}"
+            name_part="${line#*#}"
+            
+            final_tag=$(universal_clean_and_translate "$name_part" "black")
+            echo "${base_part}#${final_tag}" >> temp_combined_processed.txt
+          else
+            echo "${line}#Сервер | black" >> temp_combined_processed.txt
           fi
         done < <(sort -u temp_black_raw.txt)
 
-        # --- СБОРКА ФИНАЛЬНОГО ФАЙЛА ---
-        # Записываем провайдерские метаданные (твою фирменную шапку)
+        # --- СБОРКА ФИНАЛЬНОГО ФАЙЛА С МЕТАДАННЫМИ ---
         echo "#subscription-userinfo: upload=0; download=0; total=107374182400" >> temp_final_build.txt
         echo "# profile-update-interval: 1" >> temp_final_build.txt
         echo "# profile-title: Happ VPN Global" >> temp_final_build.txt
-        echo "# annonce: Подписка Happ VPN обновлена. Тестовый Баланс: 1000₽" >> temp_final_build.txt
+        echo "# annonce: Подписка Happ VPN обновлена. Баланс: 1000₽" >> temp_final_build.txt
         echo "" >> temp_final_build.txt
 
-        # Добавляем все обработанные уникальные конфиги из обоих списков
         cat temp_combined_processed.txt >> temp_final_build.txt
 
-        # Фиксируем результат в файлы репозитория
+        # Фиксация в репозиторий
         cp temp_final_build.txt sub.txt
         base64 -w 0 temp_final_build.txt > sub_base64.txt
 
-        # --- СТРОГОЕ УДАЛЕНИЕ ВСЕХ ТЕМПОВЫХ ФАЙЛОВ ---
-        echo "Удаляю временные файлы..."
+        # --- ОЧИСТКА ---
         rm -f temp_white_raw.txt temp_black_raw.txt temp_combined_processed.txt temp_final_build.txt
-        echo "Конвейер чист!"
+        echo "Временные файлы удалены."
 
     - name: Commit and Push changes
       run: |
@@ -88,5 +123,4 @@ jobs:
         git config --local user.name "GitHub Actions"
         git add sub.txt sub_base64.txt
         
-        # Пушим коммит только в случае изменений в подписках
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Happ Sync (Igareck Sources): $(date -u +'%Y-%m-%d %H:%M:%S') UTC" && git push)
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Happ Sync (Universal Translation): $(date -u +'%Y-%m-%d %H:%M:%S') UTC" && git push)
