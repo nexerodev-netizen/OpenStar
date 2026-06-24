@@ -3,9 +3,13 @@
 # profile-title: Happ VPN Global
 # annonce: Подписка Happ VPN обновлена. Баланс: 1000₽
 
-vless://3346b3dd-fd39-4967-8c6f-a2c472bcd7c1@217.16.28.126:443?encryption=none&type=xhttp&security=reality&path=/&mode=auto&extra=null&fp=random&sni=static3.glowbreeze.online&pbk=NGK7rbaQgNFEiZ2bnUG6PA2pU3yL1ye7WUhJk_qGO0U&sid=3fdbd681c2f9a56b#Германия 01 | white
-vless://3346b3dd-fd39-4967-8c6f-a2c472bcd7c1@217.16.28.126:443?encryption=none&type=xhttp&security=reality&path=/&mode=auto&extra=null&fp=safari&sni=static3.glowbreeze.online&pbk=NGK7rbaQgNFEiZ2bnUG6PA2pU3yL1ye7WUhJk_qGO0U&sid=3fdbd681c2f9a56b#Германия 02 | white
-vless://599907db-9e9e-4c50-b9f1-d1b42cdec21f@89.208.228.221:5443?flow=xtls-rprx-vision&encryption=none&type=tcp&security=reality&fp=chrome&sni=ads.x5.ru&pbk=0y72WqjYlRKbU-VzinCglBJt6ZD7GvDhNnkwDHB8l0Q&sid=bad5722c72a038#Россия 01 | white
+vless://4256cc0e-469e-4769-9d17-305e4ebca1bf@176.109.108.175:80?encryption=none&security=none&type=tcp#Финляндия 01 | white
+vless://0b6d2a48-c1a2-418d-95de-c80b0bcc211e@176.109.108.175:443?encryption=none&type=xhttp&security=none&path=/api/v1/alexander7777&mode=auto&extra=null#Германия 01 | white
+vless://55ff1fff-2ecd-44e9-940d-7420c862b7d2@plmw.verymad.net:28737?type=tcp&security=reality&encryption=none&fp=firefox&pbk=Q8yB9j_8uP7SgGdVZdQQBzcnB7IROViEbnGtedncSVo&sid=790693&sni=www.vk.com&spx=/L11802LebVvHowb#Польша 01 | white
+vless://448f6d1f-b658-4dea-a7c6-942f19022ac6@45.151.62.25:3443?type=grpc&security=reality&fp=chrome&pbk=q17q48JzJDfUbyY6ywXyAoD41m90QkIJ-ytwMULKjhY&sid=995c9199053a0d54&sni=epp.genproc.gov.ru&mode=gun&serviceName=xyz&authority=fasti.fun#Нидерланды 01 | white
+vless://33de2596-d95d-412b-a8c2-410be7060ca3@147.45.175.79:443?flow=xtls-rprx-vision&encryption=none&type=tcp&security=reality&fp=firefox&sni=sellflow.org&pbk=SbVKOEMjK0sIlbwg4akyBg5mL5KZwwB-ed4eEE7YnRc#Россия 01 | white
+vless://599907db-9e9e-4c50-b9f1-d1b42cdec21f@89.208.228.221:5443?flow=xtls-rprx-vision&encryption=none&type=tcp&security=reality&fp=chrome&sni=ads.x5.ru&pbk=0y72WqjYlRKbU-VzinCglBJt6ZD7GvDhNnkwDHB8l0Q&sid=bad5722c72a038#Россия 02 | white
+vless://599907db-9e9e-4c50-b9f1-d1b42cdec21f@89.208.228.221:5445?fp=firefox&pbk=cSQW3a_64jadi8uInU7XKZzTDyYKBxWj7c5MgIesIws&security=reality&serviceName=grpc&sid=bad5722c72a0&sni=ads.x5.ru&type=grpc#Россия 03 | white
 vless://41fc2564-31e5-4570-b351-1d39453603cd@bez3.stream-room.com:8443?type=tcp&security=reality&encryption=none&flow=xtls-rprx-vision&fp=chrome&pbk=QHkXBS2ENHV0khgY9VBYi8_9bpfqnUYDcfQN4cW5Qg0&sid=4326&sni=bez3.stream-room.com#Эстония 01 | black
 vless://e36360b4-052a-4b56-8f22-4cc8b06884a2@199.232.86.186:443?security=tls&type=xhttp&headerType=&path=/&host=oh8.global.ssl.fastly.net&mode=packet-up&extra={"scMaxEachPostBytes":+"1000000",+"scMaxConcurrentPosts":+100,+"scMinPostsIntervalMs":+30,+"xPaddingBytes":+"100-1000",+"noGRPCHeader":+false}&sni=api.fastly.com&fp=chrome&alpn=h3freenettirUnited#Франция 01 | black
 vless://e36360b4-052a-4b56-8f22-4cc8b06884a2@199.232.86.186:443?security=tls&type=xhttp&headerType=&path=/&host=oh8.global.ssl.fastly.net&mode=packet-up&extra={"scMaxEachPostBytes":+"1000000",+"scMaxConcurrentPosts":+100,+"scMinPostsIntervalMs":+30,+"xPaddingBytes":+"100-1000",+"noGRPCHeader":+false}&sni=api.fastly.com&fp=chrome&alpn=h3👉🆔freenettir📡🇺🇸®️United#Франция 02 | black
